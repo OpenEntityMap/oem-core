@@ -1,8 +1,6 @@
 from tests.core.mock import MockCollection
 
-from oem_core.models.episode import Episode, EpisodeMapping
-from oem_core.models.show import Show
-from oem_core.models.season import Season
+from oem_core.models import Show, Season, Episode, EpisodeMapping
 
 
 def test_merge_season_with_episodes():

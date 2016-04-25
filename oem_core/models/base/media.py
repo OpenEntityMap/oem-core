@@ -1,6 +1,6 @@
 from oem_core.core.helpers import convert_keys_to_string
 from oem_core.models.base import BaseMapping
-from oem_core.models.writable import Writable
+from oem_core.models.base.writable import Writable
 
 from bencode import bencode
 import collections
@@ -105,6 +105,9 @@ class BaseMedia(Writable):
 
         if isinstance(value, BaseMedia):
             return value.to_dict(key=key)
+
+        if isinstance(value, Writable):
+            return value.to_dict()
 
         if isinstance(value, collections.Mapping):
             if len(value) < 1:

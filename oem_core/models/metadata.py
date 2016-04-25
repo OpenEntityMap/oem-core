@@ -1,20 +1,24 @@
 from oem_core.core.minimize import Protocol
-from oem_core.models import Item
+from oem_core.models.item import Item
 
 import os
 
 
 class Metadata(object):
-    __slots__ = ['index', 'key', 'revision', 'hashes', 'media']
+    __slots__ = ['collection', 'key', 'revision', 'hashes', 'media']
 
-    def __init__(self, index, key, revision=0, hashes=None, media=None):
-        self.index = index
+    def __init__(self, collection, key, revision=0, hashes=None, media=None):
+        self.collection = collection
         self.key = key
 
         self.revision = revision
         self.hashes = hashes or {}
 
         self.media = media
+
+    @property
+    def index(self):
+        return self.collection.index
 
     def to_dict(self):
         result = {
@@ -31,9 +35,11 @@ class Metadata(object):
 
     def get(self):
         return Item.load(
+            self.collection,
             os.path.join(self.index.item_path, self.key),
             self.index.format,
-            index=self.index
+
+            media=self.media
         )
 
     def update(self, item, hash_key, hash):
@@ -53,11 +59,11 @@ class Metadata(object):
         return True
 
     @classmethod
-    def parse(cls, data, index=None, key=None):
+    def parse(cls, collection, data, key=None):
         if data.get('~') == '~':
             # Parse "minimal" data structure
             return Metadata(
-                index, key,
+                collection, key,
                 MetadataProtocol.get_value(data, MetadataProtocol.revision),
                 MetadataProtocol.get_value(data, MetadataProtocol.hashes),
                 MetadataProtocol.get_value(data, MetadataProtocol.structure, 'single')
@@ -65,7 +71,7 @@ class Metadata(object):
 
         # Parse "full" data structure
         return Metadata(
-            index, key,
+            collection, key,
             data.get('revision'),
             data.get('hashes'),
             data.get('media')

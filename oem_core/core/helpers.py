@@ -22,3 +22,13 @@ def convert_keys_to_string(value):
             result[k] = v
 
     return result
+
+
+def get_attribute(touched, data, key, default=None):
+    try:
+        value = data[key]
+
+        touched.add(key)
+        return value
+    except KeyError:
+        return default

@@ -33,10 +33,11 @@ class Database(object):
             collection = Collection.load(collection_path, self.format, source, target)
         except Exception, ex:
             log.warn('Unable to load collection %r (format: %r) - %s', collection_path, self.format, ex, exc_info=True)
-            return
+            return None
 
         # Store collection
         self.collections[source] = collection
+        return collection
 
     def load_collections(self, collections=None):
         if collections is None:

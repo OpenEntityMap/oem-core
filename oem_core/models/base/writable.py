@@ -73,11 +73,9 @@ class Writable(object):
         return False
 
     @classmethod
-    def load(cls, path, fmt=None, index=None, key=None):
+    def load(cls, collection, path, fmt=None, **kwargs):
         if not path:
             raise ValueError('Invalid value provided for "path" parameter')
-
-        name = os.path.basename(path)
 
         if fmt:
             # Append `fmt` extension to `path`
@@ -104,8 +102,8 @@ class Writable(object):
             return None
 
         # Parse item
-        return cls.parse(data, index=index, key=key or name)
+        return cls.parse(collection, data, **kwargs)
 
     @classmethod
-    def parse(cls, data, index=None, key=None):
+    def parse(cls, collection, data, **kwargs):
         raise NotImplementedError

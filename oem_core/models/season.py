@@ -1,3 +1,4 @@
+from oem_core.core.helpers import get_attribute
 from oem_core.models.episode import Episode
 from oem_core.models.base import BaseMapping, BaseMedia
 
@@ -89,7 +90,6 @@ class Season(BaseMedia):
             return True
 
         if episode_num == '0':
-            log.warn('Unmatched episode found: %s', episode_num)
             return True
 
         # Add additional episode
@@ -134,9 +134,6 @@ class Season(BaseMedia):
             if len(copied_keys) <= 0:
                 # No episodes were copied
                 return True
-
-        elif self.mappings:
-            raise NotImplementedError
         else:
             return True
 
@@ -152,15 +149,6 @@ class Season(BaseMedia):
             self.identifiers.pop(self.collection.target)
 
         return True
-
-    def to_dict(self, key=None):
-        result = super(Season, self).to_dict(key=key)
-
-        # Remove "number" attribute if it matches the parent dictionary key
-        if len(result) > 0 and key is not None and result.get('number') == key:
-            del result['number']
-
-        return result
 
     @classmethod
     def from_show(cls, show, number, item):
@@ -198,6 +186,60 @@ class Season(BaseMedia):
             pass
 
         return season
+
+    @classmethod
+    def parse(cls, collection, data, key=None, parent=None, **kwargs):
+        if key is None:
+            raise ValueError('Missing required parameter: "key"')
+
+        if parent is None:
+            raise ValueError('Missing required parameter: "parent"')
+
+        touched = set()
+
+        # Construct movie
+        season = cls(
+            collection,
+            parent,
+            key,
+
+            identifiers=get_attribute(touched, data, 'identifiers'),
+            names=set(get_attribute(touched, data, 'names', [])),
+
+            supplemental=get_attribute(touched, data, 'supplemental', {}),
+            **get_attribute(touched, data, 'parameters', {})
+        )
+
+        # Construct episodes
+        if 'episodes' in data:
+            season.episodes = dict([
+                (k, Episode.parse(collection, v, key=k, parent=season))
+                for k, v in get_attribute(touched, data, 'episodes').items()
+            ])
+
+        # Construct mappings
+        if 'mappings' in data:
+            season.mappings = [
+                SeasonMapping.parse(collection, v, parent=season)
+                for v in get_attribute(touched, data, 'mappings')
+            ]
+
+        # Ensure all attributes were touched
+        omitted = set(data.keys()) - touched
+
+        if omitted:
+            log.warn('Season.parse() omitted %d attribute(s): %s', len(omitted), ', '.join(omitted))
+
+        return season
+
+    def to_dict(self, key=None):
+        result = super(Season, self).to_dict(key=key)
+
+        # Remove "number" attribute if it matches the parent dictionary key
+        if len(result) > 0 and key is not None and result.get('number') == key:
+            del result['number']
+
+        return result
 
     def __repr__(self):
         if self.identifiers and self.names:
@@ -237,6 +279,30 @@ class SeasonMapping(BaseMapping):
         self.end = end
 
         self.offset = offset
+
+    @classmethod
+    def parse(cls, collection, data, **kwargs):
+        touched = set()
+
+        # Construct episode mapping
+        season_mapping = cls(
+            collection,
+
+            season=get_attribute(touched, data, 'season'),
+
+            start=get_attribute(touched, data, 'start'),
+            end=get_attribute(touched, data, 'end'),
+
+            offset=get_attribute(touched, data, 'offset')
+        )
+
+        # Ensure all attributes were touched
+        omitted = set(data.keys()) - touched
+
+        if omitted:
+            log.warn('SeasonMapping.parse() omitted %d attribute(s): %s', len(omitted), ', '.join(omitted))
+
+        return season_mapping
 
     def to_dict(self, key=None):
         return {

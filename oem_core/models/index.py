@@ -1,9 +1,10 @@
-from oem_core.models.metadata import Metadata
-from oem_core.models.writable import Writable
-
 import json
-import msgpack
 import os
+
+import msgpack
+
+from oem_core.models.base.writable import Writable
+from oem_core.models.metadata import Metadata
 
 
 class Index(Writable):
@@ -25,13 +26,10 @@ class Index(Writable):
         ])
 
     def get(self, key, default=None):
-        return self.items.get(key, default)
-
-    def __getitem__(self, key):
-        return self.items[key]
-
-    def __setitem__(self, key, value):
-        self.items[key] = value
+        try:
+            return self[key]
+        except KeyError:
+            return default
 
     @classmethod
     def load(cls, collection, path, fmt):
@@ -64,7 +62,7 @@ class Index(Writable):
 
         # Parse items
         index.items = dict([
-            (key, Metadata.parse(value, index, key))
+            (key, Metadata.parse(collection, value, key))
             for key, value in data.items()
         ])
 
@@ -91,11 +89,20 @@ class Index(Writable):
 
         # Parse items
         index.items = dict([
-            (key, Metadata.parse(value, index, key))
+            (key, Metadata.parse(collection, value, key))
             for key, value in data.items()
         ])
 
         return index
+
+    def __getitem__(self, key):
+        try:
+            return self.items[str(key)]
+        except KeyError:
+            return self.items[key]
+
+    def __setitem__(self, key, value):
+        self.items[str(key)] = value
 
     def __repr__(self):
         source = self.collection.source

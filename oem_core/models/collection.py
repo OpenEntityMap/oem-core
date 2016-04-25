@@ -19,9 +19,6 @@ class Collection(object):
         self.minify = minify
 
     def get(self, key, hash=None, default=None):
-        if key is None:
-            raise ValueError('Missing required parameter "key"')
-
         # Retrieve item
         item = self.index.get(key)
 
@@ -82,6 +79,12 @@ class Collection(object):
 
         # Construct collection
         return collection
+
+    def __getitem__(self, key):
+        return self.index[key]
+
+    def __setitem__(self, key, value):
+        self.index[key] = value
 
     def __repr__(self):
         if self.source and self.target:

@@ -1,3 +1,4 @@
+from oem_core.core.helpers import get_attribute
 from oem_core.models.base import BaseMedia
 from oem_core.models.season import Season
 
@@ -23,40 +24,31 @@ class Show(BaseMedia):
         if self.collection.target in self.identifiers and not self.demote():
             return False
 
-        # Retrieve season number
-        season_num = item.parameters.get('default_season')
+        # Add seasons to current show
+        season_numbers = set([
+            s.number for s in item.seasons.itervalues()
+        ] + [
+            item.parameters.get('default_season')
+        ])
 
-        if season_num is None:
-            if len(item.seasons) < 1:
-                raise NotImplementedError
+        error = False
 
-            season_num = item.seasons.values()[0].number
+        for season_num in season_numbers:
+            # Construct season
+            season = Season.from_show(self, season_num, item)
 
-        # Add additional season
-        season = Season.from_show(self, season_num, item)
+            if season_num in self.seasons:
+                # Update existing season
+                if not self.seasons[season_num].add(season, service):
+                    log.warn('Unable to add season %r to %r (show: %r)', season, self.seasons[season_num], self)
+                    error = True
 
-        if season_num in self.seasons:
-            if not self.seasons[season_num].add(season, service):
-                log.warn('Unable add season %r to %r (show: %r)', season, self.seasons[season_num], self)
-                return False
+                continue
 
-            return True
+            # Store new season
+            self.seasons[season_num] = season
 
-        self.seasons[season_num] = season
-        return True
-
-    def demote(self):
-        # Retrieve season number
-        season_num = self.parameters.get('default_season')
-
-        if season_num is None:
-            raise NotImplementedError
-
-        # Create season from current show
-        self.seasons = {season_num: Season.from_show(self, season_num, self)}
-
-        # Clear show
-        return self.clear()
+        return not error
 
     def clear(self):
         if self.collection.target not in self.identifiers:
@@ -72,8 +64,51 @@ class Show(BaseMedia):
         del self.identifiers[self.collection.target]
         return True
 
+    def demote(self):
+        # Retrieve season number
+        season_num = self.parameters.get('default_season')
+
+        if season_num is None:
+            raise NotImplementedError
+
+        # Create season from current show
+        self.seasons = {season_num: Season.from_show(self, season_num, self)}
+
+        # Clear show
+        return self.clear()
+
+    @classmethod
+    def parse(cls, collection, data, **kwargs):
+        touched = set()
+
+        # Construct movie
+        show = cls(
+            collection,
+
+            identifiers=get_attribute(touched, data, 'identifiers'),
+            names=set(get_attribute(touched, data, 'names', [])),
+
+            supplemental=get_attribute(touched, data, 'supplemental', {}),
+            **get_attribute(touched, data, 'parameters', {})
+        )
+
+        # Construct seasons
+        if 'seasons' in data:
+            show.seasons = dict([
+                (k, Season.parse(collection, v, key=k, parent=show))
+                for k, v in get_attribute(touched, data, 'seasons').items()
+            ])
+
+        # Ensure all attributes were touched
+        omitted = set(data.keys()) - touched
+
+        if omitted:
+            log.warn('Show.parse() omitted %d attribute(s): %s', len(omitted), ', '.join(omitted))
+
+        return show
+
     def __repr__(self):
-        if self.identifiers:
+        if self.identifiers and self.names:
             service = self.identifiers.keys()[0]
 
             return '<Show %s: %r, names: %r>' % (
@@ -82,6 +117,17 @@ class Show(BaseMedia):
                 self.names
             )
 
-        return '<Show names: %r>' % (
-            self.names,
-        )
+        if self.identifiers:
+            service = self.identifiers.keys()[0]
+
+            return '<Show %s: %r>' % (
+                service,
+                self.identifiers[service]
+            )
+
+        if self.names:
+            return '<Show names: %r>' % (
+                self.names
+            )
+
+        return '<Show>'

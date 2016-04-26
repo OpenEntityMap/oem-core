@@ -1,10 +1,13 @@
 import json
 import os
 
-import msgpack
-
 from oem_core.models.base.writable import Writable
 from oem_core.models.metadata import Metadata
+
+try:
+    import msgpack
+except ImportError:
+    msgpack = None
 
 
 class Index(Writable):

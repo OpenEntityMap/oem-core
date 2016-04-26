@@ -2,8 +2,12 @@ from oem_core.models.format import Format
 
 import json
 import logging
-import msgpack
 import os
+
+try:
+    import msgpack
+except ImportError:
+    msgpack = None
 
 log = logging.getLogger(__name__)
 

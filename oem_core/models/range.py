@@ -15,6 +15,15 @@ class Range(Writable):
     def is_defined(self):
         return self.start != 0 or self.end != 100
 
+    @classmethod
+    def parse(cls, collection, data, **kwargs):
+        return cls(
+            collection,
+
+            start=data.get('start', 0),
+            end=data.get('end', 100)
+        )
+
     def to_dict(self):
         result = {}
 

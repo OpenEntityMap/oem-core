@@ -1,5 +1,6 @@
 from oem_core.core.helpers import get_attribute
 from oem_core.models.base import BaseMapping, BaseMedia
+from oem_core.models.range import Range
 
 from copy import deepcopy
 import logging
@@ -164,6 +165,13 @@ class EpisodeMapping(BaseMapping):
             season=get_attribute(touched, data, 'season', parent.season),
             number=get_attribute(touched, data, 'number', parent.number)
         )
+
+        # Parse "timeline" attribute
+        if 'timeline' in data:
+            episode_mapping.timeline = dict([
+                (k, Range.parse(collection, v))
+                for k, v in data.get('timeline', {}).items()
+            ])
 
         # Ensure all attributes were touched
         omitted = set(data.keys()) - touched

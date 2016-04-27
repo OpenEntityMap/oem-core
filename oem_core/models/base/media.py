@@ -97,7 +97,7 @@ class BaseMedia(Writable):
 
     @classmethod
     def _flatten(cls, value, key=None):
-        if type(value) in [str, int]:
+        if type(value) in [str, unicode, int]:
             return value
 
         if isinstance(value, BaseMapping):
@@ -130,6 +130,9 @@ class BaseMedia(Writable):
 
             def iterator():
                 for v in value:
+                    if v is value:
+                        raise NotImplementedError
+
                     v = cls._flatten(v)
 
                     if v is None:

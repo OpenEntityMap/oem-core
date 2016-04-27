@@ -44,6 +44,9 @@ class Movie(BaseMedia):
 
         return movie
 
+    def __eq__(self, other):
+        return self.to_dict() == other.to_dict()
+
     def __repr__(self):
         if self.identifiers and self.names:
             service = self.identifiers.keys()[0]

@@ -83,11 +83,14 @@ class Episode(BaseMedia):
 
         touched = set()
 
+        # Identifier
+        number = get_attribute(touched, data, 'number')
+
         # Construct movie
         episode = cls(
             collection,
             parent,
-            key,
+            key or number,
 
             identifiers=get_attribute(touched, data, 'identifiers'),
             names=set(get_attribute(touched, data, 'names', [])),

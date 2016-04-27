@@ -20,8 +20,12 @@ class Show(BaseMedia):
         self.seasons = seasons or {}
 
     def add(self, item, service):
+        # Ensure item is different
+        if self == item:
+            return True
+
         # Demote current show to a season
-        if self.collection.target in self.identifiers and not self.demote():
+        if self.collection.target in self.identifiers and not self.demote(service):
             return False
 
         # Add seasons to current show
@@ -40,7 +44,6 @@ class Show(BaseMedia):
             if season_num in self.seasons:
                 # Update existing season
                 if not self.seasons[season_num].add(season, service):
-                    log.warn('Unable to add season %r to %r (show: %r)', season, self.seasons[season_num], self)
                     error = True
 
                 continue
@@ -64,7 +67,17 @@ class Show(BaseMedia):
         del self.identifiers[self.collection.target]
         return True
 
-    def demote(self):
+    def demote(self, service):
+        # Update existing seasons
+        for season_num, season in self.seasons.items():
+            self.seasons[season_num].update(
+                identifiers=self.identifiers,
+                names=self.names,
+
+                supplemental=self.supplemental,
+                parameters=self.parameters
+            )
+
         # Retrieve season number
         season_num = self.parameters.get('default_season')
 
@@ -72,7 +85,12 @@ class Show(BaseMedia):
             raise NotImplementedError
 
         # Create season from current show
-        self.seasons = {season_num: Season.from_show(self, season_num, self)}
+        season = Season.from_show(self, season_num, self)
+
+        if season_num in self.seasons:
+            self.seasons[season_num].add(season, service)
+        else:
+            self.seasons[season_num] = Season.from_show(self, season_num, self)
 
         # Clear show
         return self.clear()
@@ -106,6 +124,17 @@ class Show(BaseMedia):
             log.warn('Show.parse() omitted %d attribute(s): %s', len(omitted), ', '.join(omitted))
 
         return show
+
+    def to_dict(self, key=None):
+        if self.identifiers.get('tvdb') == '76703' and '16' in self.seasons:
+            pass
+
+        result = super(Show, self).to_dict(key=key)
+
+        if self.identifiers.get('tvdb') == '76703' and '16' in self.seasons:
+            pass
+
+        return result
 
     def __eq__(self, other):
         return self.to_dict() == other.to_dict()

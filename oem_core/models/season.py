@@ -24,9 +24,13 @@ class Season(BaseMedia):
         self.episodes = episodes or {}
 
     def add(self, item, service):
-        if self.identifiers:
-            # Demote current season
-            self.demote()
+        # Ensure item is different
+        if self == item:
+            return True
+
+        # Break season into episodes (if we are merging episodes
+        if item.episodes and self.collection.target in self.identifiers and not self.demote():
+            return False
 
         # Retrieve episode number
         episode_num = None
@@ -52,12 +56,22 @@ class Season(BaseMedia):
                 episode.parameters = episode.parameters or deepcopy(item.parameters)
 
                 if key in self.episodes:
+                    if type(self.episodes[key]) is list:
+                        # Ensure `episode` isn't already in season
+                        for ep in self.episodes[key]:
+                            if ep == episode:
+                                return True
+                    elif self.episodes[key] == episode:
+                        return True
+
+                    # Convert to episodes list
                     if type(self.episodes[key]) is not list:
                         current = self.episodes[key]
                         # TODO update `current` with `names` and `identifiers`
 
                         self.episodes[key] = [current]
 
+                    # Add additional episode
                     self.episodes[key].append(episode)
                     continue
 
@@ -68,11 +82,16 @@ class Season(BaseMedia):
         if episode_num is None:
             # Copy attributes
             for service, key in item.identifiers.items():
+                # Convert "identifiers" list to set type
+                if service in self.identifiers and type(self.identifiers[service]) is list:
+                    self.identifiers[service] = set(self.identifiers[service])
+
+                # Update "identifiers"
                 if service not in self.identifiers:
                     self.identifiers[service] = key
                 elif type(self.identifiers[service]) is set:
                     self.identifiers[service].add(key)
-                else:
+                elif self.identifiers[service] != key:
                     self.identifiers[service] = {self.identifiers[service], key}
 
             for name in item.names:
@@ -96,6 +115,13 @@ class Season(BaseMedia):
         episode = Episode.from_season(episode_num, item)
 
         if episode_num in self.episodes:
+            if type(self.episodes[episode_num]) is list:
+                for ep in self.episodes[episode_num]:
+                    if ep == episode:
+                        return True
+            elif self.episodes[episode_num] == episode:
+                return True
+
             log.warn('Conflict detected, episode %r already exists', episode_num)
             return False
 
@@ -117,17 +143,21 @@ class Season(BaseMedia):
         elif self.episodes:
             copied_keys = []
 
-            for key, episode in self.episodes.items():
-                if episode.identifiers:
-                    continue
+            for key, episodes in self.episodes.items():
+                if type(episodes) is not list:
+                    episodes = [episodes]
 
-                episode.identifiers = deepcopy(self.identifiers)
+                for episode in episodes:
+                    if episode.identifiers:
+                        continue
 
-                for name in self.names:
-                    episode.names.add(name)
+                    episode.identifiers = deepcopy(self.identifiers)
 
-                episode.supplemental = episode.supplemental or deepcopy(self.supplemental)
-                episode.parameters = episode.parameters or deepcopy(self.parameters)
+                    for name in self.names:
+                        episode.names.add(name)
+
+                    episode.supplemental = episode.supplemental or deepcopy(self.supplemental)
+                    episode.parameters = episode.parameters or deepcopy(self.parameters)
 
                 copied_keys.append(key)
 
@@ -212,10 +242,17 @@ class Season(BaseMedia):
 
         # Construct episodes
         if 'episodes' in data:
-            season.episodes = dict([
-                (k, Episode.parse(collection, v, key=k, parent=season))
-                for k, v in get_attribute(touched, data, 'episodes').items()
-            ])
+            def parse_episodes():
+                for k, v in get_attribute(touched, data, 'episodes').items():
+                    if type(v) is list:
+                        yield k, [
+                            Episode.parse(collection, v_episode, key=k, parent=season)
+                            for v_episode in v
+                        ]
+                    else:
+                        yield k, Episode.parse(collection, v, key=k, parent=season)
+
+            season.episodes = dict(parse_episodes())
 
         # Construct mappings
         if 'mappings' in data:
@@ -240,6 +277,37 @@ class Season(BaseMedia):
             del result['number']
 
         return result
+
+    def update(self, identifiers=None, names=None, supplemental=None, parameters=None):
+        # Copy attributes
+        for service, key in (identifiers or {}).items():
+            # Ignore source keys
+            if self.collection.source == service:
+                continue
+
+            # Convert "identifiers" list to set type
+            if service in self.identifiers and type(self.identifiers[service]) is list:
+                self.identifiers[service] = set(self.identifiers[service])
+
+            # Update "identifiers"
+            if service not in self.identifiers:
+                self.identifiers[service] = key
+            elif type(self.identifiers[service]) is set:
+                self.identifiers[service].add(key)
+            elif self.identifiers[service] != key:
+                self.identifiers[service] = {self.identifiers[service], key}
+
+        for name in (names or []):
+            self.names.add(name)
+
+        if supplemental is not None:
+            self.supplemental.update(supplemental)
+
+        if parameters is not None:
+            self.parameters.update(parameters)
+
+            if 'default_season' in self.parameters:
+                del self.parameters['default_season']
 
     def __eq__(self, other):
         return self.to_dict() == other.to_dict()

@@ -18,8 +18,12 @@ class Movie(BaseMedia):
         self.mappings = mappings or []
 
     def add(self, item, service):
+        # Ensure item is different
+        if self == item:
+            return True
+
         # TODO manage movie duplicates
-        pass
+        log.warn('Ignored Movie.add(), function not implemented yet')
 
     @classmethod
     def parse(cls, collection, data, **kwargs):
@@ -51,7 +55,7 @@ class Movie(BaseMedia):
         if self.identifiers and self.names:
             service = self.identifiers.keys()[0]
 
-            return '<Show %s: %r, names: %r>' % (
+            return '<Movie %s: %r, names: %r>' % (
                 service,
                 self.identifiers[service],
                 self.names
@@ -60,14 +64,14 @@ class Movie(BaseMedia):
         if self.identifiers:
             service = self.identifiers.keys()[0]
 
-            return '<Show %s: %r>' % (
+            return '<Movie %s: %r>' % (
                 service,
                 self.identifiers[service]
             )
 
         if self.names:
-            return '<Show names: %r>' % (
+            return '<Movie names: %r>' % (
                 self.names
             )
 
-        return '<Show>'
+        return '<Movie>'

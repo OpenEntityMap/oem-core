@@ -80,6 +80,9 @@ class Collection(object):
         # Construct collection
         return collection
 
+    def __contains__(self, key):
+        return key in self.index
+
     def __getitem__(self, key):
         return self.index[key]
 

@@ -98,6 +98,9 @@ class Index(Writable):
 
         return index
 
+    def __contains__(self, key):
+        return str(key) in self.items or key in self.items
+
     def __getitem__(self, key):
         try:
             return self.items[str(key)]

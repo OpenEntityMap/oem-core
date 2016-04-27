@@ -170,7 +170,7 @@ class EpisodeMapping(BaseMapping):
         if 'timeline' in data:
             episode_mapping.timeline = dict([
                 (k, Range.parse(collection, v))
-                for k, v in data.get('timeline', {}).items()
+                for k, v in get_attribute(touched, data, 'timeline', {}).items()
             ])
 
         # Ensure all attributes were touched

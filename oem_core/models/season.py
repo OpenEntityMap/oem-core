@@ -29,7 +29,7 @@ class Season(BaseMedia):
             return True
 
         # Break season into episodes (if we are merging episodes
-        if item.episodes and self.collection.target in self.identifiers and not self.demote():
+        if (self.episodes or item.episodes) and self.collection.target in self.identifiers and not self.demote():
             return False
 
         # Retrieve episode number
@@ -126,9 +126,44 @@ class Season(BaseMedia):
             return False
 
         self.episodes[episode_num] = episode
+
+        # Add season mappings
+        for mapping in item.mappings:
+            # Check for duplicate mapping
+            matched = any([mapping == m for m in self.mappings])
+
+            if matched:
+                continue
+
+            # Update mapping
+            mapping.identifiers = deepcopy(item.identifiers)
+
+            for name in item.names:
+                mapping.names.add(name)
+
+            # Store mapping in current season
+            self.mappings.append(mapping)
+
+        return True
+
+    def clear(self):
+        if self.collection.target not in self.identifiers:
+            return False
+
+        # Reset attributes
+        self.names = set()
+
+        self.supplemental = {}
+        self.parameters = {}
+
+        # Remove target collection identifier
+        del self.identifiers[self.collection.target]
         return True
 
     def demote(self):
+        demoted = False
+
+        # Demote season (with episode offset)
         episode_offset = self.parameters.get('episode_offset')
 
         if episode_offset is not None:
@@ -139,9 +174,18 @@ class Season(BaseMedia):
                 episode_num = episode_offset
 
             # Create episode from current season
-            self.episodes = {episode_num: Episode.from_season(episode_num, self)}
-        elif self.episodes:
-            copied_keys = []
+            episode = Episode.from_season(episode_num, self)
+
+            if episode_num not in self.episodes:
+                self.episodes[episode_num] = episode
+            else:
+                log.warn('Conflict detected, episode %r already exists', episode_num)
+
+            demoted = True
+
+        # Demote episodes
+        if self.episodes:
+            target_identifier = self.identifiers.get(self.collection.target)
 
             for key, episodes in self.episodes.items():
                 if type(episodes) is not list:
@@ -149,8 +193,13 @@ class Season(BaseMedia):
 
                 for episode in episodes:
                     if episode.identifiers:
+                        # Check for episode identifier match
+                        if target_identifier == episode.identifiers.get(self.collection.target):
+                            demoted = True
+
                         continue
 
+                    # Update episode
                     episode.identifiers = deepcopy(self.identifiers)
 
                     for name in self.names:
@@ -159,24 +208,31 @@ class Season(BaseMedia):
                     episode.supplemental = episode.supplemental or deepcopy(self.supplemental)
                     episode.parameters = episode.parameters or deepcopy(self.parameters)
 
-                copied_keys.append(key)
+                    demoted = True
 
-            if len(copied_keys) <= 0:
-                # No episodes were copied
-                return True
-        else:
-            return True
+        # Demote mappings
+        if self.mappings:
+            target_identifier = self.identifiers.get(self.collection.target)
 
-        # Remove old attributes
-        self.identifiers = {}
-        self.names = set()
+            for mapping in self.mappings:
+                if mapping.identifiers:
+                    # Check for episode identifier match
+                    if target_identifier == mapping.identifiers.get(self.collection.target):
+                        demoted = True
 
-        self.supplemental = {}
-        self.parameters = {}
+                    continue
 
-        # Update show identifiers
-        if self.collection.target in self.identifiers:
-            self.identifiers.pop(self.collection.target)
+                # Update mapping
+                mapping.identifiers = deepcopy(self.identifiers)
+
+                for name in self.names:
+                    mapping.names.add(name)
+
+                demoted = True
+
+        if demoted:
+            # Clear season attributes
+            return self.clear()
 
         return True
 
@@ -191,7 +247,11 @@ class Season(BaseMedia):
 
         # Build season parameters
         parameters = deepcopy(item.parameters)
-        del parameters['default_season']
+
+        default_season = parameters.pop('default_season', None)
+
+        if default_season != number and 'episode_offset' in parameters:
+            del parameters['episode_offset']
 
         # Construct season
         season = Season(
@@ -339,10 +399,13 @@ class Season(BaseMedia):
 
 
 class SeasonMapping(BaseMapping):
-    __slots__ = ['season', 'start', 'end', 'offset']
+    __slots__ = ['identifiers', 'names', 'season', 'start', 'end', 'offset']
 
-    def __init__(self, collection, season, start, end, offset):
+    def __init__(self, collection, season, start, end, offset, identifiers=None, names=None):
         super(SeasonMapping, self).__init__(collection)
+
+        self.identifiers = identifiers or {}
+        self.names = names or set()
 
         self.season = season
 
@@ -359,11 +422,13 @@ class SeasonMapping(BaseMapping):
         season_mapping = cls(
             collection,
 
+            identifiers=get_attribute(touched, data, 'identifiers'),
+            names=set(get_attribute(touched, data, 'names', [])),
+
             season=get_attribute(touched, data, 'season'),
 
             start=get_attribute(touched, data, 'start'),
             end=get_attribute(touched, data, 'end'),
-
             offset=get_attribute(touched, data, 'offset')
         )
 
@@ -376,7 +441,7 @@ class SeasonMapping(BaseMapping):
         return season_mapping
 
     def to_dict(self, key=None):
-        return {
+        result = {
             'season': self.season,
 
             'start': self.start,
@@ -384,3 +449,14 @@ class SeasonMapping(BaseMapping):
 
             'offset': self.offset
         }
+
+        if self.identifiers:
+            result['identifiers'] = self.identifiers
+
+        if self.names:
+            result['names'] = list(self.names)
+
+        return result
+
+    def __eq__(self, other):
+        return self.to_dict() == other.to_dict()

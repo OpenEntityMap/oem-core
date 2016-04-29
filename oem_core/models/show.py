@@ -90,7 +90,7 @@ class Show(BaseMedia):
         if season_num in self.seasons:
             self.seasons[season_num].add(season, service)
         else:
-            self.seasons[season_num] = Season.from_show(self, season_num, self)
+            self.seasons[season_num] = season
 
         # Clear show
         return self.clear()

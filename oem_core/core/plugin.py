@@ -247,6 +247,24 @@ class PluginManager(object):
             if not os.path.exists(package_path):
                 continue
 
+            # Check if `package_path` is a plugin
+            package_name = os.path.basename(package_path)
+
+            if cls._is_plugin(package_name):
+                # Find module
+                module_name = package_name.replace('-', '_')
+                module_path = os.path.join(package_path, module_name)
+
+                if not os.path.exists(module_path):
+                    continue
+
+                yield package_name, {
+                    'root_path': package_path,
+
+                    'package_path': module_path,
+                    'package_name': module_name
+                }
+
             # List items in `package_path`
             try:
                 items = os.listdir(package_path)

@@ -1,23 +1,20 @@
-from oem_framework.format import Format
-from oem_framework.models.core import ModelRegistry
 from oem_framework import models
+from oem_framework.core.elapsed import Elapsed
+from oem_framework.storage import CollectionStorage
 
 import logging
-import os
 
 log = logging.getLogger(__name__)
 
 
 class Collection(models.Collection):
     @classmethod
-    def load(cls, path, fmt, source=None, target=None):
-        """Load collection from `path`
+    @Elapsed.track
+    def load(cls, storage, source=None, target=None):
+        """Load collection from `storage`
 
-        :param path: Path to collection directory
-        :type path: str
-
-        :param fmt: Collection format
-        :type fmt: Format
+        :param storage: Storage interface
+        :type storage: CollectionStorage
 
         :param source: Name of source service
         :type source: str
@@ -28,14 +25,10 @@ class Collection(models.Collection):
         :rtype: Collection
         """
 
-        if not isinstance(fmt, Format):
-            raise ValueError('Invalid value provided for the "fmt" parameter')
+        if not isinstance(storage, CollectionStorage):
+            raise ValueError('Invalid value provided for the "storage" parameter')
 
         # Construct collection
-        collection = cls(path, source, target, fmt)
-
-        # Open index
-        collection.index = ModelRegistry['Index'].load(collection, os.path.join(path, 'index.%s' % fmt.__extension__), fmt)
-
-        # Construct collection
+        collection = cls(storage, source, target)
+        collection.index = storage.open_index(collection)
         return collection

@@ -1,26 +1,18 @@
 from oem_framework import models
+from oem_framework.core.elapsed import Elapsed
+from oem_framework.storage import IndexStorage
 
 import logging
-import os
 
 log = logging.getLogger(__name__)
 
 
 class Index(models.Index):
     @classmethod
-    def load(cls, collection, path, fmt):
-        # Ensure directory for items exist
-        items_path = os.path.join(os.path.dirname(path), 'items')
+    @Elapsed.track
+    def load(cls, collection, storage):
+        if not isinstance(storage, IndexStorage):
+            raise ValueError('Invalid value provided for the "storage" parameter')
 
-        if not os.path.exists(items_path):
-            os.makedirs(items_path)
-
-        # Construct new index (if one doesn't create yet)
-        if not os.path.exists(path):
-            return cls(collection, path, fmt)
-
-        # Load index from path
-        return fmt.from_path(
-            collection, cls, path,
-            fmt=fmt
-        )
+        # Construct collection
+        return storage.load(collection)

@@ -1,32 +1,54 @@
-from oem_framework.plugin import Plugin
-
 import imp
 import inspect
 import logging
 import os
 import sys
 
+from oem_framework.core.elapsed import Elapsed
+from oem_framework.plugin import Plugin
+
 log = logging.getLogger(__name__)
 
-PLUGIN_DATABASE_PREFIX = 'oem-database-'
-PLUGIN_FORMAT_PREFIX = 'oem-format-'
+PLUGIN_KEYS = [
+    'database',
+    'format',
+    'storage'
+]
 
 PLUGIN_PREFIXES = [
-    PLUGIN_DATABASE_PREFIX,
-    PLUGIN_FORMAT_PREFIX
+    'oem-database-',
+    'oem-format-',
+    'oem-storage-'
 ]
+
+
+def construct_collection(value):
+    result = {}
+
+    for key in PLUGIN_KEYS:
+        if value == 'dict':
+            result[key] = {}
+        elif value == 'list':
+            result[key] = []
+        else:
+            raise ValueError('Unknown value provided for "value" parameter')
+
+    return result
 
 
 class PluginManager(object):
     search_paths = [os.path.abspath(os.curdir)]
 
-    _available = {'database': {}, 'format': {}}
-    _loaded = {'database': {}, 'format': {}}
+    _available = construct_collection('dict')
+    _loaded    = construct_collection('dict')
+    _ordered   = construct_collection('list')
 
     @classmethod
     def discover(cls):
         # Reset current state
-        cls._available = {'database': {}, 'format': {}}
+        cls._available = construct_collection('dict')
+        cls._loaded    = construct_collection('dict')
+        cls._ordered   = construct_collection('list')
 
         # Discover available plugins
         for name, path in cls._list_plugins():
@@ -43,16 +65,43 @@ class PluginManager(object):
     @classmethod
     def get(cls, kind, key):
         # Ensure plugin is loaded
-        if key not in cls._loaded[kind]:
-            # Load plugin
-            if not cls.load(kind, key):
-                return None
+        if not cls.load(kind, key):
+            return None
 
         # Return loaded plugin
         return cls._loaded[kind][key]
 
     @classmethod
+    def has(cls, kind, key):
+        return key in cls._available[kind]
+
+    @classmethod
+    def list(cls, kind):
+        for key, descriptor in cls._available[kind].items():
+            # Ensure plugin is loaded
+            if not cls.load(kind, key):
+                continue
+
+            # Yield plugin
+            yield key, cls._loaded[kind][key]
+
+    @classmethod
+    def list_ordered(cls, kind):
+        # Ensure available plugins are loaded
+        for key, descriptor in cls._available[kind].items():
+            if not cls.load(kind, key):
+                continue
+
+        # Return plugins in order
+        return cls._ordered[kind]
+
+    @classmethod
+    @Elapsed.track
     def load(cls, kind, key):
+        if key in cls._loaded[kind]:
+            # Plugin already loaded
+            return True
+
         # Parse module `key`
         plugins = cls._parse_plugins_key(key)
 
@@ -61,13 +110,19 @@ class PluginManager(object):
             descriptor = cls._available[kind].get(name)
 
             if descriptor is None:
+                # Missing plugin
                 log.warn('Unable to find installation of %r plugin', key)
+                return False
+            elif descriptor is False:
+                # Ignored plugin
                 return False
 
             # Try load the plugin module
             module = cls._load_module(descriptor, module_name)
 
             if module is None:
+                # Mark plugin as ignored
+                cls._available[kind][name] = False
                 return False
 
         # Find plugin class
@@ -91,11 +146,15 @@ class PluginManager(object):
             break
 
         if plugin is None:
-            log.warn('Unable to find plugin in %r', module)
             return False
 
-        # Store loaded plugin
+        # Store plugin in dictionary
         cls._loaded[kind][key] = plugin
+
+        # Store plugin in priority list
+        cls._insert_plugin(cls._ordered[kind], (key, plugin), key=lambda x: x[1].__priority__)
+
+        log.info('Loaded %s: %r', kind, key)
         return True
 
     @classmethod
@@ -105,20 +164,20 @@ class PluginManager(object):
 
         plugins = key.split('+')
 
-        result = []
+        result = set()
 
         # Parse extra plugins
-        for plugin_key in plugins[:-1]:
+        for plugin_key in plugins:
             # Parse plugin key
             plugin_name, plugin_module = cls._parse_plugin_key(plugin_key)
 
             if not plugin_name or not plugin_module:
                 continue
 
-            result.append((plugin_name, plugin_module))
+            result.add((plugin_name, plugin_module))
 
         # Parse main plugin
-        result.append(cls._parse_plugin_key(key.replace('+', '-')))
+        result.add(cls._parse_plugin_key(key.replace('+', '-')))
 
         return result
 
@@ -138,10 +197,14 @@ class PluginManager(object):
     @classmethod
     def _load_module(cls, descriptor, module_name):
         # Load package
-        fp, filename, (suffix, mode, type) = imp.find_module(
-            descriptor['package_name'],
-            [descriptor['root_path']]
-        )
+        try:
+            fp, filename, (suffix, mode, type) = imp.find_module(
+                descriptor['package_name'],
+                [descriptor['root_path']]
+            )
+        except Exception, ex:
+            log.warn('Unable to find package %r - %s', descriptor['package_name'], ex, exc_info=True)
+            return None
 
         if type != imp.PKG_DIRECTORY:
             log.warn('Invalid package at %r (expected python package)', descriptor['package_path'])
@@ -154,7 +217,11 @@ class PluginManager(object):
             return None
 
         # Load module
-        fp, filename, (suffix, mode, type) = imp.find_module(module_name, package.__path__)
+        try:
+            fp, filename, (suffix, mode, type) = imp.find_module(module_name, package.__path__)
+        except Exception, ex:
+            log.warn('Unable to find module %r in %r - %s', module_name, package.__name__, ex)
+            return None
 
         if type not in [imp.PY_SOURCE, imp.PY_COMPILED]:
             log.warn('Invalid module at %r (expected python source or compiled module)', descriptor['module_path'])
@@ -235,3 +302,24 @@ class PluginManager(object):
                 return True
 
         return False
+
+    @staticmethod
+    def _insert_plugin(a, x, lo=0, hi=None, key=None):
+        if lo < 0:
+            raise ValueError('lo must be non-negative')
+
+        if hi is None:
+            hi = len(a)
+
+        if key is None:
+            key = lambda x: x.__priority__
+
+        while lo < hi:
+            mid = (lo+hi)//2
+
+            if key(a[mid]) < key(x):
+                lo = mid+1
+            else:
+                hi = mid
+
+        a.insert(lo, x)

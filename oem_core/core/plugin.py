@@ -51,16 +51,31 @@ class PluginManager(object):
         cls._ordered   = construct_collection('list')
 
         # Discover available plugins
-        for name, path in cls._list_plugins():
+        for package_name, descriptor in cls._list_plugins():
             # Parse plugin name
-            kind, key = cls._parse_package_name(name)
+            kind, key = cls._parse_package_name(package_name)
 
-            # Store available plugin
-            if key in cls._available[kind]:
-                log.warn('Found multiple installations of %r, using installation at %r', name, cls._available[kind][key])
-                continue
+            # Find child plugins
+            children = []
 
-            cls._available[kind][key] = path
+            for filename in os.listdir(descriptor['package_path']):
+                if not filename.endswith('.py'):
+                    continue
+
+                if filename.startswith('__init__.') or filename.startswith('main.'):
+                    continue
+
+                name, _ = os.path.splitext(filename)
+
+                children.append('%s/%s' % (key, name))
+
+            for k in [key] + children:
+                # Store available plugin
+                if k in cls._available[kind]:
+                    log.warn('Found multiple installations of %r, using installation at %r', package_name, cls._available[kind][k])
+                    continue
+
+                cls._available[kind][k] = descriptor
 
     @classmethod
     def get(cls, kind, key):

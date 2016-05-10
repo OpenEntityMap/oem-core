@@ -15,7 +15,13 @@ PLUGIN_KEYS = [
     'storage'
 ]
 
-PLUGIN_PREFIXES = [
+MODULE_PREFIXES = [
+    'oem_database_',
+    'oem_format_',
+    'oem_storage_'
+]
+
+PACKAGE_PREFIXES = [
     'oem-database-',
     'oem-format-',
     'oem-storage-'
@@ -77,6 +83,8 @@ class PluginManager(object):
 
                 cls._available[kind][k] = descriptor
 
+                log.debug('Found %s: %s', kind, k)
+
     @classmethod
     def get(cls, kind, key):
         # Ensure plugin is loaded
@@ -126,7 +134,7 @@ class PluginManager(object):
 
             if descriptor is None:
                 # Missing plugin
-                log.warn('Unable to find installation of %r plugin', key)
+                log.warn('Unable to find installation of %r plugin', name)
                 return False
             elif descriptor is False:
                 # Ignored plugin
@@ -267,18 +275,12 @@ class PluginManager(object):
 
             if cls._is_plugin(package_name):
                 # Find module
-                module_name = package_name.replace('-', '_')
-                module_path = os.path.join(package_path, module_name)
+                name, descriptor = cls._find_plugin(name, path)
 
-                if not os.path.exists(module_path):
+                if descriptor is None:
                     continue
 
-                yield package_name, {
-                    'root_path': package_path,
-
-                    'package_path': module_path,
-                    'package_name': module_name
-                }
+                yield name, descriptor
 
             # List items in `package_path`
             try:
@@ -300,18 +302,40 @@ class PluginManager(object):
                     continue
 
                 # Find module
-                module_name = name.replace('-', '_')
-                module_path = os.path.join(path, module_name)
+                name, descriptor = cls._find_plugin(name, path)
 
-                if not os.path.exists(module_path):
+                if descriptor is None:
+                    log.debug('No descriptor returned for %r', name, path)
                     continue
 
-                yield name, {
-                    'root_path': path,
+                yield name, descriptor
 
-                    'package_path': module_path,
-                    'package_name': module_name
-                }
+    @classmethod
+    def _find_plugin(cls, name, path):
+        if cls._is_plugin_module(name):
+            return name.replace('_', '-'), {
+                'root_path': os.path.abspath(os.path.join(path, '..')),
+
+                'package_path': path,
+                'package_name': name
+            }
+
+        if cls._is_plugin_package(name):
+            module_name = name.replace('-', '_')
+            module_path = os.path.join(path, module_name)
+
+            if not os.path.exists(module_path):
+                return None, None
+
+            return name, {
+                'root_path': path,
+
+                'package_path': module_path,
+                'package_name': module_name
+            }
+
+        log.warn('Unknown plugin name: %r', name)
+        return None, None
 
     @classmethod
     def _parse_package_name(cls, name):
@@ -330,7 +354,19 @@ class PluginManager(object):
 
     @classmethod
     def _is_plugin(cls, name):
-        for prefix in PLUGIN_PREFIXES:
+        return cls._is_plugin_module(name) or cls._is_plugin_package(name)
+
+    @classmethod
+    def _is_plugin_module(cls, name):
+        for prefix in MODULE_PREFIXES:
+            if name.startswith(prefix):
+                return True
+
+        return False
+
+    @classmethod
+    def _is_plugin_package(cls, name):
+        for prefix in PACKAGE_PREFIXES:
             if name.startswith(prefix):
                 return True
 

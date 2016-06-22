@@ -79,6 +79,10 @@ class PluginManager(object):
             for k in [key] + children:
                 # Store available plugin
                 if k in cls._available[kind]:
+                    if cls._available[kind][k]['package_path'] == descriptor['package_path']:
+                        # Plugin has already been found
+                        continue
+
                     log.warn('Found multiple installations of %r, using installation at %r', package_name, cls._available[kind][k])
                     continue
 

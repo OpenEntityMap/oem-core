@@ -12,18 +12,21 @@ log = logging.getLogger(__name__)
 
 PLUGIN_KEYS = [
     'database',
+    'database-updater',
     'format',
     'storage'
 ]
 
 MODULE_PREFIXES = [
     'oem_database_',
+    'oem_database_updater_',
     'oem_format_',
     'oem_storage_'
 ]
 
 PACKAGE_PREFIXES = [
     'oem-database-',
+    'oem-database-updater-',
     'oem-format-',
     'oem-storage-'
 ]
@@ -174,6 +177,7 @@ class PluginManager(object):
             break
 
         if plugin is None:
+            log.warn('Unable to find plugin class for %s: %r', kind, key)
             return False
 
         # Store plugin in dictionary
@@ -392,7 +396,7 @@ class PluginManager(object):
         if not name:
             return None, None
 
-        fragments = name.split('-', 2)
+        fragments = name.split('-')
 
         if fragments[0] != 'oem':
             return None, None
@@ -400,7 +404,14 @@ class PluginManager(object):
         if len(fragments) < 3:
             return None, None
 
-        return fragments[1], fragments[2]
+        for end in xrange(len(fragments) - 1, 1, -1):
+            kind = '-'.join(fragments[1:end])
+
+            if kind in PLUGIN_KEYS:
+                return kind, '-'.join(fragments[end:])
+
+        log.warn('Unknown package name: %r', name)
+        return None, None
 
     @classmethod
     def _is_plugin(cls, name):

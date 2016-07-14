@@ -13,6 +13,8 @@ log = logging.getLogger(__name__)
 PLUGIN_KEYS = [
     'database',
     'database-updater',
+    'client',
+    'client-provider',
     'format',
     'storage'
 ]
@@ -20,6 +22,8 @@ PLUGIN_KEYS = [
 MODULE_PREFIXES = [
     'oem_database_',
     'oem_database_updater_',
+    'oem_client_',
+    'oem_client_provider_',
     'oem_format_',
     'oem_storage_'
 ]
@@ -27,6 +31,8 @@ MODULE_PREFIXES = [
 PACKAGE_PREFIXES = [
     'oem-database-',
     'oem-database-updater-',
+    'oem-client-',
+    'oem-client-provider-',
     'oem-format-',
     'oem-storage-'
 ]

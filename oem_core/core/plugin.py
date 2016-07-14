@@ -1,6 +1,7 @@
 from oem_framework.core.elapsed import Elapsed
 from oem_framework.plugin import Plugin
 
+from six.moves import xrange
 import imp
 import inspect
 import logging
